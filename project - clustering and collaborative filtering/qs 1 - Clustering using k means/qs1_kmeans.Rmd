@@ -1,0 +1,470 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+```{r}
+rm(list=ls())
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 4/k means")
+getwd()
+
+```
+```{r Generating Observations from Mixture of Gaussians - set up}
+mu1<-as.vector(c(0,0))
+sigma1<-matrix(c(1,0,0,1), nrow=2, ncol=2)
+sigma1
+
+mu2<-as.vector(c(3,0))
+sigma2<-sigma1
+
+mu3<-as.vector(c(0,3))
+sigma3<-sigma1
+
+sigma3
+
+####weights to each distribution
+pi<-c(0.2,0.5,0.3)
+
+
+```
+```{r - Generating the Observations}
+library(mvtnorm)
+###we use this package since we are generating random vectors in the x-y plane
+set.seed(1)
+N=500
+dists = runif(N)
+dists[1]
+dists
+
+sigma <- matrix(c(4,2,2,3), ncol=2)
+x <- rmvnorm(n=500, mean=c(1,2), sigma=sigma)
+colMeans(x)
+var(x)
+
+data = matrix(, nrow=N, ncol=2)
+class(data)
+#data
+for(i in 1:N){
+  if(dists[i]<pi[1]){
+    data[i,] = rmvnorm(1, mean=mu1, sigma = sigma1)
+  } else if(dists[i]<pi[2]){
+    data[i,] = rmvnorm(1, mean=mu2, sigma = sigma2)
+  } else {
+    data[i,] = rmvnorm(1, mean=mu3, sigma = sigma3)
+  }
+}
+
+data
+
+summary(data)
+
+plot(density(data))
+
+```
+
+```{r Implementing K Means}
+
+Kmeans<-function(k)
+{
+    X<-data
+  k=k
+
+###create c, a vector which contains the class that each observation is assigned to. Each place in c will take integer values between 1 and k
+
+c<-rep(0,N)
+
+
+####Start the Algorithm
+####randomly initializing  mu  - the vector which contains means of all the k clusters. This will be a 2*k matrix.
+
+mu<-matrix(runif(2*k), ncol=k) 
+mu
+
+####Iterative steps
+iterations<-20
+
+OBJ_VALUE<-c() ## save the objective function value in this list after each iteration
+
+for (t in 1:iterations)
+{
+    for (j in 1:N)
+  {
+   dist_mat<-t(mu)
+  
+  dist_mat<-rbind(dist_mat,X[j,])
+  
+  distances<-as.matrix(dist(dist_mat))
+  
+  ###removing the columns and rows we do not need
+  distances<-distances[k+1,1:k]
+  c[j]<-which.min(distances)
+ 
+  }
+  
+  ### Step 2: updating each cluster mean vector
+
+#c
+class_counts<-table(c)
+# class_counts
+# 
+# for (i in 1:k)
+# {
+#   
+#   counts<-class_counts[names(class_counts)==i]
+#   assign(paste0("n", i), counts)
+#   
+#   }
+
+
+#####Now we vectorize to find the mean vectors for each class
+
+###Initialize a matrix with only 0s in it
+D<-matrix(0,nrow=N, ncol=k)
+#D
+
+for (i in 1:N)
+{
+  for (j in 1:k)
+  {
+    if (c[i]==j)
+    {
+      D[i,j]=1
+    }
+      
+  }
+}
+  
+#colSums(D)
+##as we expect
+
+##Now, finding the mean vectors
+#dim(X)
+
+
+mat1<-t(X)%*%D
+#dim(mat1)  
+
+###divide each column of this matrix with the number of observations in that class
+mat2<-mat1
+for (j in 1:k)
+{
+  num<-class_counts[j]
+  mat2[,j]<-(1/num)*mat2[,j]
+}
+
+#mat1
+#mat2
+####works well
+
+###Now we need to update the mean vectors before the next iteration
+for(j in 1:k)
+{
+  mu[,j]<-mat2[,j]
+}
+
+##note that mat2 is also a 2 by k matrix, so this matches correctly
+
+
+
+####End of one iteration, Before we go back and update classes, we will compute value of objective function - Step 3
+#### We do a vectorized implementation
+
+###we create a list of k matrices, one for each class. Each matrix will have 2 rows, since are in R2. We initialize it with 1 column. In the end, the number of columns in each matrix will correspond to the number of observations in that class
+
+#listOfMatrices<-lapply(1:k, function(x) matrix(NA, 2))
+#listOfMatrices
+
+distances<-rep(0,k)
+
+mat1<-t(X)
+
+for (i in 1:N)
+{
+  vec1<-as.matrix(mat1[,i])##extract the ith observation from the data matrix
+  
+  for (j in 1:k)
+  {
+    if (c[i]==j)## if the ith observation belongs to class k
+    {
+      vec2<-as.matrix(vec1-mu[,j])###find the difference between the ith observation and the jth cluster mean
+      squared_distance<-as.numeric(t(vec2)%*%vec2)
+      distances[j]<-distances[j]+squared_distance
+      # M<-(as.matrix(unlist(listOfMatrices[j])))
+      # class(M)
+      # #M
+      # dim(M)
+      # M<-cbind(M,vec2)### add this new vector to the jth matrix. We will use this matrix later to compute the objective funct value
+      # #M
+    }
+    
+  }
+}
+
+objective_value<-sum(distances)
+OBJ_VALUE[t]<-objective_value
+
+  
+}
+
+return(OBJ_VALUE)
+
+}
+
+
+
+###Now call Kmeans for different values of K
+
+results<-data.frame(nrow=20, ncol=5)
+
+for (k in 1:5)
+{
+  values<-Kmeans(k)
+  results<-cbind(results,values)
+}
+
+results<-results[,4:7]
+colnames(results)<-c("2", "3", "4", "5")
+class(results)
+runs<-c(1:iterations)
+results<-cbind(results, runs)
+
+
+
+####Answering question 1a)
+library(ggplot2)
+
+ggplot(data=results, aes(x=runs)) + 
+  geom_line(aes(y = 2), colour="red") + 
+  geom_line(aes(y = 3), colour="blue")
+
+#####not able to do this without reshaping the data:
+library(reshape2)
+
+results_long <- melt(results, id="runs")
+
+colnames(results_long)[2] <- "k"
+#colnames(results_long)[3] <- "objectivevalue"
+
+
+plot1<-ggplot(data=results_long,
+       aes(x=runs, y=value, colour=k)) +
+       geom_line()+
+      ylab("Objective Function Value")
+
+plot1
+
+###Finally works!!
+
+ggsave("plot1.png")
+
+
+
+# ggplot(results, aes(x = runs)) + 
+#   geom_line(aes(y = 2), colour="blue") + 
+#   geom_line(aes(y = 3), colour = "grey")
+
+
+```
+
+
+```{r Question 1b)}
+
+###we tweak the function so that it now returns objectve function values as well as the clusters which each point is assigned to. Everything else is exactly the same
+
+Kmeans_v2<-function(k)
+{
+    X<-data
+  k=k
+
+###create c, a vector which contains the class that each observation is assigned to. Each place in c will take integer values between 1 and k
+
+c<-rep(0,N)
+
+
+####Start the Algorithm
+####randomly initializing  mu  - the vector which contains means of all the k clusters. This will be a 2*k matrix.
+
+mu<-matrix(runif(2*k), ncol=k) 
+mu
+
+####Iterative steps
+iterations<-20
+
+OBJ_VALUE<-c() ## save the objective function value in this list after each iteration
+
+for (t in 1:iterations)
+{
+    for (j in 1:N)
+  {
+   dist_mat<-t(mu)
+  
+  dist_mat<-rbind(dist_mat,X[j,])
+  
+  distances<-as.matrix(dist(dist_mat))
+  
+  ###removing the columns and rows we do not need
+  distances<-distances[k+1,1:k]
+  c[j]<-which.min(distances)
+ 
+  }
+  
+  ### Step 2: updating each cluster mean vector
+
+#c
+class_counts<-table(c)
+# class_counts
+# 
+# for (i in 1:k)
+# {
+#   
+#   counts<-class_counts[names(class_counts)==i]
+#   assign(paste0("n", i), counts)
+#   
+#   }
+
+
+#####Now we vectorize to find the mean vectors for each class
+
+###Initialize a matrix with only 0s in it
+D<-matrix(0,nrow=N, ncol=k)
+#D
+
+for (i in 1:N)
+{
+  for (j in 1:k)
+  {
+    if (c[i]==j)
+    {
+      D[i,j]=1
+    }
+      
+  }
+}
+  
+#colSums(D)
+##as we expect
+
+##Now, finding the mean vectors
+#dim(X)
+
+
+mat1<-t(X)%*%D
+#dim(mat1)  
+
+###divide each column of this matrix with the number of observations in that class
+mat2<-mat1
+for (j in 1:k)
+{
+  num<-class_counts[j]
+  mat2[,j]<-(1/num)*mat2[,j]
+}
+
+#mat1
+#mat2
+####works well
+
+###Now we need to update the mean vectors before the next iteration
+for(j in 1:k)
+{
+  mu[,j]<-mat2[,j]
+}
+
+##note that mat2 is also a 2 by k matrix, so this matches correctly
+
+
+
+####End of one iteration, Before we go back and update classes, we will compute value of objective function - Step 3
+#### We do a vectorized implementation
+
+###we create a list of k matrices, one for each class. Each matrix will have 2 rows, since are in R2. We initialize it with 1 column. In the end, the number of columns in each matrix will correspond to the number of observations in that class
+
+#listOfMatrices<-lapply(1:k, function(x) matrix(NA, 2))
+#listOfMatrices
+
+distances<-rep(0,k)
+
+mat1<-t(X)
+
+for (i in 1:N)
+{
+  vec1<-as.matrix(mat1[,i])##extract the ith observation from the data matrix
+  
+  for (j in 1:k)
+  {
+    if (c[i]==j)## if the ith observation belongs to class k
+    {
+      vec2<-as.matrix(vec1-mu[,j])###find the difference between the ith observation and the jth cluster mean
+      squared_distance<-as.numeric(t(vec2)%*%vec2)
+      distances[j]<-distances[j]+squared_distance
+      # M<-(as.matrix(unlist(listOfMatrices[j])))
+      # class(M)
+      # #M
+      # dim(M)
+      # M<-cbind(M,vec2)### add this new vector to the jth matrix. We will use this matrix later to compute the objective funct value
+      # #M
+    }
+    
+  }
+}
+
+objective_value<-sum(distances)
+OBJ_VALUE[t]<-objective_value
+
+  
+}
+
+outputList<-list(OBJ_VALUE, c)
+
+return(outputList)
+
+}
+
+output<-Kmeans_v2(3)
+class<-output[2]
+
+orig_data<-data.frame(data)
+orig_data<-cbind(orig_data,class)
+colnames(orig_data)<-c("x", "y", "cluster")
+
+class(orig_data$cluster)
+
+plot2<-ggplot(orig_data, aes(x,y))+
+  geom_point(aes(color=factor(cluster)))+
+  labs(xlab="x")+
+  labs(ylab="y")+
+  labs(title ="Clustering when K = 3")
+  
+plot2 
+ggsave("plot2.png")
+  
+
+output<-Kmeans_v2(5)
+class<-output[2]
+
+orig_data<-data.frame(data)
+orig_data<-cbind(orig_data,class)
+colnames(orig_data)<-c("x", "y", "cluster")
+
+class(orig_data$cluster)
+
+plot3<-ggplot(orig_data, aes(x,y))+
+  geom_point(aes(color=factor(cluster)))+
+  labs(xlab="x")+
+  labs(ylab="y")+
+  labs(title ="Clustering when K = 5")
+  
+plot3
+
+ggsave("plot3.png")
+
+
+```
+

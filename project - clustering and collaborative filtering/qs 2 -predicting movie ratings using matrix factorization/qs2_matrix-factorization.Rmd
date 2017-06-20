@@ -1,0 +1,572 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+
+```{r}
+install.packages(c("tidyr", "devtools"))
+rm(list=ls())
+
+library(tidyr)
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 4/qs 2")
+getwd()
+table1<-read.csv("ratings.csv")
+length(unique(table1$user_id))
+###943 unique users
+length(unique(table1$movie_id))
+###1676 unique movies
+
+table2<-spread(table1,movie_id, rating)
+table2[1,122]
+
+table2<-table2[,-1]
+table_train<-table2
+
+rm(table2)
+
+nrow(table_train)
+ncol(table_train)
+
+###looks good!
+
+
+###Now we'll do the same for the test data
+test_data<-read.csv("ratings_test.csv")
+length(unique(test_data$user_id))
+###838 unique users
+length(unique(test_data$movie_id))
+###1062 unique movies
+
+table_test<-spread(test_data,movie_id, rating)
+table_test<-table_test[,-1]
+
+##looks good!
+
+
+```
+
+```{r MAP inference coordinate ascent algorithm}
+###parameters are:
+library(mvtnorm)
+lambda<-1
+d<-10
+sigmasqr<-0.25
+runs<-10
+iterations<-100 ## no of iterations for each run of our code
+RMSE<-rep(NA,runs)  
+
+#####initializing two lists. We will save the U and V matrices in these lists after each run of the code
+listOfUs<-list()
+listOfVs<-list()
+##listOfUs[[1]]<-U
+
+
+#####Now we create an empty data frame which will save our results for each of the runs
+OBJECTIVE_FUNC<-as.data.frame((matrix(nrow=iterations, ncol=runs)))
+
+
+
+N1<-nrow(table_train)
+#N1
+N2<-ncol(table_train)
+#N2
+
+  ### first create matrices, whose rows are all the u and v vectors
+  U<-matrix(,nrow=N1, ncol=d)
+  V<-matrix(,nrow=d, ncol=N2)
+  #dim(V)
+
+ ###################################################################
+  #####Begin the outer loop - t
+  
+  ptm<-proc.time()
+  ptm
+  
+  for(t in 1:runs)
+  {
+    #paste("outer loop # ", t)
+    print(t)
+      ###we initialize the u and v vectors with a prior. Store these vectors in their respective matrices
+  mu<-as.vector(rep(0,d))
+  mu
+  sigma<-lambda*diag(d)
+  sigma
+
+  f<-function(vector)
+  {
+    vector=rmvnorm(1, mean=mu, sigma = sigma)
+  }
+  
+  U<-t(apply(U,1, f))
+  #dim(U)
+  
+  V<-(apply(V,2, f))
+
+  #dim(V)
+#V[,2:5]
+###works well!
+
+#####begin the iterative steps - we need to use our training data set. Each row of 
+##table_train is a given u vector, each columnn is a given v vector. We use these to get the output vectors u and v which we will use for prediction
+  
+training_data<-as.matrix(table_train)
+
+
+
+###intialize a vector which will save values of objective function for each iteration
+  objectiveFunction<-c()
+  
+for(num in 1:iterations)
+{
+  
+  paste("inner loop #", num)
+
+###update all the u vectors
+for (user in 1:nrow(U))
+{
+  given_u<-as.matrix(training_data[user,])
+  #class(given_u)
+  #dim(given_u)
+  given_u<-t(given_u)
+  # length (given_u[is.na(given_u)])
+  # length (given_u[!is.na(given_u)])
+    index_movies_rated<-which(!is.na(given_u))
+    #index_movies_rated
+    #length(index_movies_rated)
+    
+    ###using these indices, we now extract the corresponding columns from V
+    Vtemp<-V[,index_movies_rated]
+    #dim(V)
+    #dim(Vtemp)
+    A<-Vtemp%*%t(Vtemp)
+    #dim(A)
+    B<-lambda*sigmasqr*diag(d)
+    #dim(B)
+    C<-solve(A+B)
+
+    weightsFirst<-as.matrix(t(given_u[index_movies_rated]))
+    #class(Mij)
+    #dim(Mij)
+    D<-Vtemp%*%t(weightsFirst)
+    e<-C%*%D
+    #dim(e)
+    U[user,]<-t(e)
+    # U[user,]
+    # e
+    
+}
+
+###update all the v vectors
+
+for (movie in 1:ncol(V))
+{
+  #print(movie)
+  given_v<-as.matrix(training_data[,movie])
+  #class(given_v)
+  #dim(given_v)
+  #length (given_v[is.na(given_v)])
+  #length (given_v[!is.na(given_v)])
+    index_users_whorated<-which(!is.na(given_v))
+   # index_users_whorated
+    #length(index_users_whorated)
+    
+    ###using these indices, we now extract the corresponding columns from V
+    Utemp<-as.matrix(U[index_users_whorated,])
+    #dim(Utemp)
+    if (length(index_users_whorated)>1)## we need this condition since R converts a row vector to a column vector by default. So if Utemp has one row, R will transpose it automatically
+    {
+        Utemp<-t(Utemp)
+    ###when vectorizing, we are thinking of each u as a column vector. this is why we take the transpose of Utemp
+
+    }
+      #dim(Utemp)
+    P<-Utemp%*%t(Utemp)
+    #dim(P)
+    Q<-lambda*sigmasqr*diag(d)
+    #dim(Q)
+    R<-solve(P+Q)
+
+    weightsSecond<-as.matrix(t(given_v[index_users_whorated]))
+    #class(Mij)
+    #dim(weightsSecond)
+    #dim(Utemp)
+    S<-(Utemp)%*%t(weightsSecond)
+    #dim(S)
+    #dim(R)
+    z<-R%*%S
+    #dim(z)
+    V[,movie]<-z
+    # U[user,]
+    # e
+
+}
+
+  
+  #####Compute the objective function
+predicted_ratings<-U%*%V
+#dim(predicted_ratings)
+
+missing_count<-(sum(is.na(training_data)))
+#missing_count
+#1485468 missing values in the test data set
+total<-nrow(training_data)*ncol(training_data)
+#total
+##1580468 cells in the matrix
+
+num1<-total-missing_count
+#num1
+###95000 non missing values
+
+errorMat<-predicted_ratings-training_data
+errorMat<-errorMat^2
+
+first<-(sum(errorMat, na.rm=TRUE))/(2*sigmasqr)
+#dim(U)
+first
+
+missing_count_new<-(sum(is.na(errorMat)))
+missing_count_new==missing_count
+### same as before! - so we can subtract a matrix which has missing values
+
+
+####once again we vectorize our code to calculate the second and third terms
+#dim(U)
+
+### we want to combine all the rows into one long row vector
+U1<-as.matrix(c(t(U)))
+#dim(U1)
+###U1 is a 9430X1 columns vector
+
+second<-(t(U1)%*%U1)*(lambda/2)
+#second
+
+#dim(V)
+V1<-as.matrix(c((V)))
+#dim(V1)
+##V1 is a 16760X1 column vector
+
+third<-(t(V1)%*%V1)*(lambda/2)
+#third
+
+objective_value<- -(first+second+third)
+#objective_value
+
+objectiveFunction[num]<-objective_value
+
+  
+  ####################END OF iteration##################################################################################
+  
+  
+}
+
+  
+  
+###For each run, we save our U and V matrix in corresponding lists  
+  listOfUs[[t]]<-U
+  listOfVs[[t]]<-V
+  
+  
+###Now we append the obj function values for this run to our data frame
+OBJECTIVE_FUNC[,t]<-objectiveFunction
+
+
+#################################Compute test error
+
+########Approach 1
+dim(U)
+dim(V)
+test_data<-as.matrix(table_test)
+predicted_ratings<-U%*%V
+dim(predicted_ratings)
+## dimensions same as training data set
+
+missing_count<-(sum(is.na(test_data)))
+missing_count
+#884956 missing values in the test data set
+
+dim(test_data)
+dim(predicted_ratings)
+####we can drop rows from the predicted ratings data set. For RMSE, we only need to retain those values which are in the test data set
+
+
+predicted_data<-predicted_ratings[1:nrow(test_data),1:ncol(test_data)]
+#dim(predicted_data)
+#class(predicted_data)
+
+errorMat<-predicted_data-test_data
+#dim(errorMat)
+
+#missing_count_new<-(sum(is.na(errorMat)))
+#missing_count_new==missing_count
+### same as before!
+
+total<-nrow(test_data)*ncol(test_data)
+num<-total-missing_count
+total
+#missing_count
+#num
+###num is the number of non-missing ratings in the test data set
+
+errorMat<-errorMat^2
+#sum(is.na(errorMat))
+
+mse<-(sum(errorMat, na.rm=TRUE))/num
+#mse
+rmse<-sqrt(mse)
+
+
+RMSE[t]<-rmse
+
+total_time1<-proc.time() - ptm
+##recording time taken for iteration to run
+
+
+
+  ####################END OF 1 run of the code##################################################################################
+
+    
+  }
+  
+  
+##########Our RMSE seems to be higher than usual. So we calculate RMSE using a second approach. We will just use the U and V matrices we have generated through each run of the code. This obviates running the whole code again.
+  
+  ################################Approach 2
+# test_data_2<-read.csv("ratings_test.csv")
+# 
+# ##test_data_2.1<-test_data_2[order(test_data_2$user_id),]
+# 
+# ##dim(test_data_2.1)
+# 
+# 
+# SSE=0
+# nrow(test_data_2)
+# RMSE_latest<-c()
+# 
+# size<-length(listOfUs)
+# 
+# size<-2
+# 
+# 
+# for (j in 1:size)
+# {
+#   Umat<-as.matrix(unlist(listOfUs[[j]]))
+#   Vmat<-as.matrix(unlist(listOfVs[[j]]))
+#   
+#   
+#   for (q in 1:nrow(test_data_2))
+# {
+#   ##extract the test rating given to us
+#   test_rating<-test_data_2[q,3]
+#   
+#   ###extract the relevant id numbers
+#   ui<-test_data_2[q,1]
+#   vj<-test_data_2[q,2]
+#   
+#   ###extract these particular vectors from the U and V matrices
+#   if(vj<=1676)
+#   {
+#     uvector<-as.matrix(Umat[ui,])
+#     vvector<-as.matrix(Vmat[,vj])
+#   
+#   ###Now compute predicted rating
+#   prediction<-t(uvector)%*%vvector
+#   
+#   ###Now compute the test error:
+#   
+#   difference_sq<-(prediction-test_rating)^2
+#   SSE = SSE + difference_sq  
+#   
+#   }  
+#   
+# }
+# 
+# MEAN_SQ_ERROR<-SSE/5000
+# ROOT_MEAN_SQ_ERROR<-sqrt(MEAN_SQ_ERROR)
+# 
+# RMSE_latest[j]<-ROOT_MEAN_SQ_ERROR
+#   
+# }
+# 
+#   
+  
+  
+  
+```
+
+```{r Questions 2a)}
+##########Problem 2 a)
+
+num_iterations<-c(1:100)
+OBJECTIVE_FUNC_1<-cbind(OBJECTIVE_FUNC, num_iterations)
+colnames(OBJECTIVE_FUNC_1)<-c("1","2", "3", "4", "5", "6","7","8","9","10", "iterations")
+OBJECTIVE_FUNC_1<-OBJECTIVE_FUNC_1[-1,]
+###only want iterations 2 to 100
+
+library(reshape2)
+library(ggplot2)
+
+results_long <- melt(OBJECTIVE_FUNC_1, id="iterations")
+
+colnames(results_long)[2] <- "code_run_number"
+#colnames(results_long)[3] <- "objectivevalue"
+
+
+plot1<-ggplot(data=results_long,
+       aes(x=iterations, y=value, colour=code_run_number)) +
+       geom_line()+
+      ylab("Log Joint Likelihood")
+
+plot1
+
+
+###Finally works!!
+
+ggsave("plot1.png")
+
+  
+####Second part of the question
+final_values<-OBJECTIVE_FUNC[100,]
+
+final_values<-as.data.frame(t(final_values))
+RMSE<-rmse_latest
+results_1<-cbind(final_values, RMSE)
+colnames(results_1)[1]<-"final_obj_function_values"
+rownames(results_1)<-c("1","2","3","4","5","6","7","8","9","10")      
+
+results_final<-results_1[order(results_1[,1],decreasing=TRUE),]
+write.csv(results_final, "final_results.csv")
+
+
+#
+
+#   plot(RMSE)
+#   plot(objectiveFunction)
+#   plot(RMSE, objectiveFunction)
+#   
+#   output<-data.frame(cbind(RMSE,objectiveFunction))
+#   output[
+#   order( output[,-2] ),
+# ]
+
+```
+
+```{r Question 2b}
+#movies_data<-read.table("movies.txt")
+movies_data<-readLines("movies.txt", n=-1)
+class(movies_data)
+movies_data_new<-data.frame(movies_data)
+class(movies_data_new)
+
+
+###We note down the movie ids manually from this. The row number gives us the movie id
+##Star wars  - Movie id 50
+##My fair lady - Movie id: 485
+##Goodfellas  - Movie id: 182
+
+
+####From the results_final data frame, we see that the 9th run of the code had the highest value of the objective function. So we will extract the 9th V matrix from the list we stored all the Vs in.
+
+Vbest<-as.matrix(unlist(listOfVs[[9]]))
+dim(Vbest)
+##works well
+
+##Now we implememnt KNN to find the most similar movies using Vbest
+
+##First, create a distance matrix from V. Every row contains euclidean distances from that movie to every other movie in the data set
+
+combined_dist<-as.matrix(dist(t(Vbest), method="euclidean", p=2))
+dim(combined_dist)
+###square matrix, as expected
+
+extract<-c(50,485,182)
+
+
+
+combined_dist_query<-combined_dist[extract,]
+###we extract the  three query movies we need
+
+
+#####The following code enables us to identify the 11 nearest neighbours (in terms of user ratings) for the movie Star Wars. Finall, we output these results in a csv file.
+StarWarsNN<-data.frame(combined_dist_query[1,])
+##class(StarWarsNN)
+StarWarsNN <- cbind(movie_id = rownames(StarWarsNN), StarWarsNN)
+colnames(StarWarsNN)[2]<-"distances"
+StarWarsNN<-StarWarsNN[order(StarWarsNN$distances),]
+StarWarsNN<-StarWarsNN[1:11,]
+
+StarWarsNN$movie_id<-as.numeric(levels(StarWarsNN$movie_id))[StarWarsNN$movie_id]
+
+#StarWarsNN$movie_id<-as.numeric(StarWarsNN$movie_id)
+StarWarsNNids<-StarWarsNN$movie_id
+StarWarsNNnames<-movies_data_new[StarWarsNNids,]
+
+
+StarWarsNNfinal<-cbind(as.character(StarWarsNNnames), StarWarsNN)
+colnames(StarWarsNNfinal)[1]<-"movie_name"
+StarWarsNNfinal<-StarWarsNNfinal[c(2,1,3)]
+
+write.csv(StarWarsNNfinal, "StarWarsNNfinal.csv")
+
+
+
+###repeat the same for the My Fair Lady
+MyFairLadyNN<-data.frame(combined_dist_query[2,])
+##class(MyFairLadyNN)
+MyFairLadyNN <- cbind(movie_id = rownames(MyFairLadyNN), MyFairLadyNN)
+colnames(MyFairLadyNN)[2]<-"distances"
+MyFairLadyNN<-MyFairLadyNN[order(MyFairLadyNN$distances),]
+MyFairLadyNN<-MyFairLadyNN[1:11,]
+
+MyFairLadyNN$movie_id<-as.numeric(levels(MyFairLadyNN$movie_id))[MyFairLadyNN$movie_id]
+
+#MyFairLadyNN$movie_id<-as.numeric(MyFairLadyNN$movie_id)
+MyFairLadyNNids<-MyFairLadyNN$movie_id
+MyFairLadyNNnames<-movies_data_new[MyFairLadyNNids,]
+
+
+MyFairLadyNNfinal<-cbind(as.character(MyFairLadyNNnames), MyFairLadyNN)
+colnames(MyFairLadyNNfinal)[1]<-"movie_name"
+MyFairLadyNNfinal<-MyFairLadyNNfinal[c(2,1,3)]
+
+write.csv(MyFairLadyNNfinal, "MyFairLadyNNfinal.csv")
+
+
+
+###repeat the same for GoodFellas
+GoodFellasNN<-data.frame(combined_dist_query[3,])
+##class(GoodFellasNN)
+GoodFellasNN <- cbind(movie_id = rownames(GoodFellasNN), GoodFellasNN)
+colnames(GoodFellasNN)[2]<-"distances"
+GoodFellasNN<-GoodFellasNN[order(GoodFellasNN$distances),]
+GoodFellasNN<-GoodFellasNN[1:11,]
+
+GoodFellasNN$movie_id<-as.numeric(levels(GoodFellasNN$movie_id))[GoodFellasNN$movie_id]
+
+#GoodFellasNN$movie_id<-as.numeric(GoodFellasNN$movie_id)
+GoodFellasNNids<-GoodFellasNN$movie_id
+GoodFellasNNnames<-movies_data_new[GoodFellasNNids,]
+
+
+GoodFellasNNfinal<-cbind(as.character(GoodFellasNNnames), GoodFellasNN)
+colnames(GoodFellasNNfinal)[1]<-"movie_name"
+GoodFellasNNfinal<-GoodFellasNNfinal[c(2,1,3)]
+write.csv(GoodFellasNNfinal, "GoodFellasNNfinal.csv")
+
+############################################################################################################## END
+
+```
+
+
