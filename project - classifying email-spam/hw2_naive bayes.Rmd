@@ -1,0 +1,320 @@
+---
+title: "R Notebook"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+This file contains the implementation of a naive bayes classifier to classify email/spam accurately from the given data set
+```{r}
+rm(list=ls())
+
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 2/hw2-data")
+
+options(scipen = 999)
+library(dplyr)
+library(ggplot2)
+install.packages("pastecs")
+library(pastecs)
+library(boot)
+
+X_train<-read.csv("X_train.csv", header=FALSE)
+
+Xmatrix_train<-data.matrix(X_train)
+
+y<-read.csv("y_train.csv", header=FALSE)
+y_train<-data.matrix(y)
+##X<-matrix(X)
+
+
+```
+
+```{r -Estimating parameters - spam class}
+####Estimating the parameters using the training data
+priors<-rep(0,2)
+priors[2]<-mean(y_train)
+priors[1]<-1-priors[2]
+train_data<-cbind(y_train, Xmatrix_train)
+
+###rename columns
+colnames(train_data)[1] <- c("y")
+colnames(train_data) <- gsub("V","x",colnames(train_data))
+
+train_data<-as.data.frame(train_data)
+
+###subsetting by class
+spam_train_data<-subset(train_data, y==1)
+email_train_data<-subset(train_data, y==0)
+
+str(spam_train_data)
+str(email_train_data)
+
+########computing parameters for class spam
+names(spam_train_data)
+theta_spam<-rep(0,54)
+
+
+bin_features<-subset(spam_train_data, select= -c(y,x57,x56,x55))
+cont_features<-subset(spam_train_data, select=c(x55,x56,x57))
+
+###remove the first column with all the y values for ease
+
+str(bin_features)
+
+for (i in 1:54)
+{
+  param_value<-mean(bin_features[,i])
+  theta_spam[i]<-param_value
+}
+
+
+str(cont_features)
+theta_spam_cont<-rep(0,3)
+
+
+  #vector<-as.data.frame(cont_features[,1])
+
+for (j in 1:length(cont_features))
+{
+  vector<-(cont_features[,j])
+
+
+  sum<-0
+  
+  for (i in 1:nrow(cont_features))
+  {
+    sum<- sum + log(vector[i])
+  }
+  
+  param_value<-nrow(cont_features)/sum
+  print(param_value)
+  theta_spam_cont[j]<-param_value
+  print(theta_spam_cont[j])
+  
+}
+
+####concatenate the lists - this is list of parameters for spam class
+theta_spam<-c(theta_spam, theta_spam_cont)
+
+
+
+
+```
+
+```{r Estimating parameters  - email class}
+######################################repeat the same for class EMAIL
+theta_email<-rep(0,54)
+
+bin_features<-subset(email_train_data, select= -c(y,x57,x56,x55))
+cont_features<-subset(email_train_data, select=c(x55,x56,x57))
+
+###remove the first column with all the y values for ease
+
+str(bin_features)
+
+
+for (i in 1:54)
+{
+  param_value<-mean(bin_features[,i])
+  theta_email[i]<-param_value
+}
+
+
+str(cont_features)
+theta_email_cont<-rep(0,3)
+
+
+#vector<-as.data.frame(cont_features[,1])
+
+for (j in 1:length(cont_features))
+{
+  vector<-(cont_features[,j])
+  
+  
+  sum<-0
+  
+  for (i in 1:nrow(cont_features))
+  {
+    sum<- sum + log(vector[i])
+  }
+  
+  param_value<-nrow(cont_features)/sum
+  print(param_value)
+  theta_email_cont[j]<-param_value
+  print(theta_email_cont[j])
+  
+}
+
+####concatenate the lists - this is list of parameters for spam class
+theta_email<-c(theta_email, theta_email_cont)
+
+```
+
+```{r - Implementing naive bayes algorithm}
+#####trying out the naive bayes prediction
+predicted_probability<-rep(0,2)
+#train_data<-subset(train_data, )
+
+########now use the test data
+X_test<-read.csv("X_test.csv", header=FALSE)
+
+Xmatrix_test<-data.matrix(X_test)
+
+y<-read.csv("y_test.csv", header=FALSE)
+y_test<-data.matrix(y)
+
+
+test_data<-as.data.frame(Xmatrix_test)
+y_test<-as.data.frame(y_test)
+
+#test_data<-cbind(y_test, Xmatrix_test)
+
+###rename columns
+colnames(y_test)[1] <- c("y")
+colnames(test_data) <- gsub("V","x",colnames(test_data))
+
+y_pred<-rep(0,nrow(y_test))
+
+
+
+
+bin_features<-subset(test_data, select= -c(x57,x56,x55))
+cont_features<-subset(test_data, select=c(x55,x56,x57))
+
+
+for (row in 1:nrow(test_data))
+{
+  #####for each observation in data set, first compute the probability of being email
+  likelihood<-1.0
+  vector<-bin_features[row,]
+  for (j in 1:ncol(bin_features))
+  {
+    p<-theta_email[j]
+    x<-vector[j]
+    prob<-(p^x)*((1-p)^(1-x))
+    likelihood<-likelihood*prob
+  }
+    vector<-cont_features[row,]
+    for (j in 1:ncol(cont_features))
+    {
+      p<-theta_email_cont[j]
+      x<-vector[j]
+      prob<- p*(x^(-p-1))
+      likelihood<-likelihood*prob
+    }
+    
+    
+  ####Now (P(y=email) = likelihood*prior)  
+  
+    predicted_probability[1]<-priors[1]*likelihood
+    
+    #####for each observation in data set, compute the probability of being spam
+    likelihood<-1.0
+    vector<-bin_features[row,]
+    for (j in 1:ncol(bin_features))
+    {
+      p<-theta_spam[j]
+      x<-vector[j]
+      prob<-(p^x)*((1-p)^(1-x))
+      likelihood<-likelihood*prob
+    }
+    vector<-cont_features[row,]
+  
+      for (j in 1:ncol(cont_features))
+    {
+      p<-theta_spam_cont[j]
+      x<-vector[j]
+      prob<- p*(x^(-p-1))
+      likelihood<-likelihood*prob
+    }
+    
+    
+    ####Now (P(y=spam) = likelihood*prior)  
+    
+    predicted_probability[2]<-priors[2]*likelihood
+    
+    if (predicted_probability[1] < predicted_probability[2])
+    {
+      y_pred[row]<-1
+    }
+    
+}
+
+
+
+```
+
+```{r tabulating results}
+results<-cbind(y_test, y_pred)
+#colnames(results) <- gsub("y","Actual y",colnames(results))
+#colnames(results) <- gsub("(y_pred)","Predicted y",colnames(results))
+
+colnames(results)[1] <- c("Actual y")
+colnames(results)[2] <- c("Predicted y")
+
+table(results)
+
+
+# Here are my results
+# 
+# Predicted y
+# Actual y  0  1
+# 0 54  2
+# 1  5 32
+# > 86/93
+# [1] 0.9247312
+
+
+
+```
+
+```{r - Creating a stem plot}
+###################Creating stem plots
+stem <- function(x,y,pch=16,linecol=1,clinecol=1,...){
+  if (missing(y)){
+    y = x
+    x = 1:length(x) }
+  plot(x,y,pch=pch,...)
+  for (i in 1:length(x)){
+    lines(c(x[i],x[i]), c(0,y[i]),col=linecol)
+  }
+  lines(c(x[1]-2,x[length(x)]+2), c(0,0),col=clinecol)
+}
+
+# 
+# #An example
+# x <- seq(0, 2*pi, by = 0.2)
+# par(mfrow=c(2,1))
+# stem(x,sin(x), main = 'Default style')
+# stem(x,sin(x),main='With MATLAB colors', col=4,linecol=4,clinecol=2)
+# 
+
+
+y1 <- theta_email[1:54]
+x1<-1:54
+par(mfrow=c(2,1))
+stem(x1,y1,main='Stem Plot - Class "Email"', col=4,linecol=4,clinecol=2)
+
+
+y2 <- theta_spam[1:54]
+x2<-1:54
+par(mfrow=c(2,1))
+stem(x2,y2,main='Stem Plot - Class "Spam"', col=4,linecol=4,clinecol=2)
+
+y1[16]
+
+
+```
+
+
+
+

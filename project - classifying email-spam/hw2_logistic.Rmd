@@ -1,0 +1,222 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+
+```{r - reading and processing data}
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 2/hw2-data")
+
+options(scipen = 999)
+library(dplyr)
+library(ggplot2)
+install.packages("pastecs")
+library(pastecs)
+library(boot)
+
+rm(list=ls())
+
+
+X_train<-read.csv("X_train.csv", header=FALSE)
+
+Xmatrix_train<-data.matrix(X_train)
+
+# y<-read.csv("y_train.csv", header=FALSE)
+# y_train<-data.matrix(y)
+# 
+# y<-as.vector(y_train)
+# y[y==0]<--1
+# y_train<-data.matrix(y)
+# 
+
+y<-read.csv("y_train.csv", header=FALSE)
+y<-as.vector(y)
+y[y==0]<--1
+y_train<-data.matrix(y)
+
+
+train_data<-cbind(y_train, Xmatrix_train)
+
+
+colnames(train_data)[1] <- c("y")
+colnames(train_data) <- gsub("V","x",colnames(train_data))
+
+train_data<-as.data.frame(train_data)
+
+train_data<-train_data[,-1]
+
+#### adding a column of 1s
+x0<-rep(1,4508)
+train_data<-cbind(x0, train_data)
+
+
+
+```
+
+```{r writing useful functions}
+###step size
+eta<-function(t)
+{
+  return (1/((10^5)*(sqrt(t+1))))
+  #return (1/(10^5))
+}
+
+objective<-function(y,x,w)
+{
+  num1<-y*((t(x)%*%w))
+  exponent<-exp(-num1)
+  value<-(1/(1+ exponent))
+  if (value==0)
+  {
+    value<-(10^(-5))
+  }
+  
+  num2<-log(value)
+  return (num2)
+}
+
+
+
+
+# objective<-function(y,x,w)
+# {
+#   number<-y*((t(x)%*%w))
+#              
+#   exponent<-exp(number)
+#   if (is.infinite(exponent))
+#   {
+#     if(number<0)
+#     {
+#       exponent<-exp(10^(-5))  
+#     }
+#     
+#     if (number>0)
+#     {
+#       exponent<-exp(10^5)
+#     }
+#   
+#   }
+#   
+#   value<-(log(exponent/(1+ exponent)))
+#   #print(is.nan(value))
+#   
+# 
+#   if ( is.infinite(value))
+#   {
+#     value=log(10^(-2))
+#   }
+#   #print(value)
+# 
+# 
+#   return (value)
+# }
+
+
+gradient<-function(y,x,w)
+{
+  vector<-as.vector (1/(1+exp(y*(t(x)%*%w))))*(y*x)
+  return(vector)         
+}
+
+
+```
+
+```{r - the logistic regression gradient ascent algorithm}
+###keeping track of objective function
+L<-rep(0,10000)
+
+##########start the algorithm
+
+####initializing w to the 0 vector
+w<-rep(0,58)
+w<-as.vector(w)
+
+
+iterations<-100
+for (t in 1:iterations)
+{
+  grad<-as.vector(rep(0,58))
+  obj_funct<-0
+  
+  for (n in 1:nrow(train_data))
+  {
+    xi<-unname(unlist(train_data[n,]))
+    xi<-as.vector(xi)
+    print(class(y))
+    yi<-y[n,1]
+    grad=grad + gradient(yi,xi,w)
+    num<-objective(yi,xi,w)
+    print(num)
+    obj_funct<-obj_funct + num 
+    #print(obj_funct)
+  }
+  
+  L[t]<-obj_funct
+  step<-eta(t)
+  w<-w + step*grad
+}
+
+
+newL<-L[1:100]
+plot(newL)
+
+
+
+```
+
+
+```{r trying vectorized forms}
+################################trying vectorized forms
+
+vector<-as.vector(rep(0,4508))
+for (i in 1:length(vector))
+{
+  xi<-unname(unlist(train_data[i,]))
+  xi<-as.vector(xi)
+  yi<-y[i,1]
+  vector[i]<-(1/1 + exp(yi*(t(xi)%*%w)))
+}
+
+mat<-as.matrix(train_data)
+for (i in 1:nrow(mat))
+{
+  mat[i,]<-y[i,1]*mat[i,]
+}
+
+ans<-t(vector)%*%mat
+vector<-as.matrix((vector))
+
+###ans is a matrix of dimensions (1*58)
+###we need the transpose of this
+ans<-t(ans)
+
+###multiply this with eta increment gradient vector
+
+
+# '''
+# grad_vect<-as.vector(rep(0,4508))
+# 
+# for (i in 1:length(grad_vect))
+# {
+#   xi<-unname(unlist(train_data[n,]))
+#   xi<-as.vector(xi)
+#   yi<-y[n,1]
+#   grad_vect[i]<-gradient[yi,xi,w]
+# }
+# apply(sum, grad_vect)
+# 
+# '''
+
+
+```
+
+
