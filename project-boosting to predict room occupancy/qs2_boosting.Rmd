@@ -1,0 +1,508 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+rm(list=ls())
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+```
+
+
+```{r}
+rm(list=ls())
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 3/data/boosting")
+getwd()
+
+```
+
+
+```{r}
+Xtrain<-read.csv("X_train.csv", header=FALSE)
+ytrain<-read.csv("y_train.csv", header=FALSE)
+
+Xtest<-read.csv("X_test.csv")
+ytest<-read.csv("y_test.csv")
+
+
+
+
+####Adding a dimension of 1s
+V0<-rep(1,nrow(Xtrain))
+#V0
+
+Xtrain<-cbind(V0, Xtrain)
+
+V0<-rep(1,nrow(Xtest))
+
+Xtest<-cbind(V0, Xtest)
+
+rm(V0)
+  
+?sample
+
+```
+
+
+```{r}
+n<-nrow(Xtrain)
+n
+weightStart<-rep(1/n, nrow(Xtrain))
+str(weightStart)
+
+########stopped here...
+
+id<-rownames(Xtrain)
+
+Xtrain_1<-cbind(id=id, Xtrain, weightStart)
+##Xtrain_1<-as.matrix(Xtrain_1)
+class(Xtrain_1)
+
+
+id<-rownames(Xtest)
+Xtest_1<-cbind(id=id, Xtest)
+
+
+####Also creating matrices which will be used later
+XtrainMat<-as.matrix(Xtrain)
+ytrainMat<-as.matrix(ytrain)
+
+XtestMat<-as.matrix(Xtest)
+ytestMat<-as.matrix(ytest)
+
+```
+
+```{r}
+########################functions we will need to call in the algorithm
+
+###this function computes the error in each iteration of boosting
+###Args: takes a parameter vector w, and the vector of most recent weights
+### Returns: a list containing the error vector and a data frame to be used subsequently
+
+findError<-function(w, wt)
+{
+#Mat<-as.matrix(Mat)  
+yhat<-sign(XtrainMat%*%w)
+temp<-as.data.frame(cbind(ytrainMat, yhat, wt))
+colnames(temp)<-c("y","yhat", "weight")
+#size<-nrow(temp)
+#class(temp)  
+#str(temp)
+
+
+# temp_1<-temp%>%
+#   mutate(difference=y-yhat)%>%
+#   filter(difference!=0)
+
+temp1<-temp
+temp1$difference=temp1$yhat-temp1$y
+temp1<-subset(temp1, difference!=0)
+
+epsilon<-sum(temp1$weight)
+output<-list(epsilon, temp)
+return (output)
+
+}
+
+###Function: This function is used to get the predicted values after we finish boosting for t rounds
+###Arguments: a matrix W - whose each column is a vector of parameters w, an input data frame Mat, and a list ALPHA. We use this function to compute trainig and test error. 
+###Return: This function will return a list of predicted classes for that data frame
+  
+  
+prediction<-function(Mat1,Mat2, Array)
+{
+ class(Array)
+ Array<-as.vector(Array)
+
+ Mat1<-as.matrix(Mat1)
+ Mat2<-as.matrix(Mat2)
+ class(Mat1)
+ str(Mat1)
+ str(Mat2)
+
+ ####this is a silly adjustment we need to make, since a row vector in R is automatically converted into a column vector
+ 
+  ifelse(ncol(Mat2)>1, Wtr<-t(Mat2), Wtr<-Mat2)
+ 
+# {
+#    Wtr<-t(W)
+#   dim(Wtr)
+#    
+#  }
+#  
+#  Wtr<-W
+ 
+ #####remember to take the sign again since this is a classification problem!
+ A<-sign(Mat1%*%Wtr)
+ print(dim(A))
+ 
+ 
+  ###multiplying the ith row in transpose(A) by the ith component in alpha
+  B<-Array*t(A)
+   #A[1:5,1:4]
+  #B[1:5,1:4]
+  # ALPHA[1:5]
+  # 
+  ###summing up each column in the matrix B
+  C<-t(apply(B,2, sum))
+  C[,1:4]
+  
+  ###taking the sign of all the elements in the row matrix C. This completes the 
+  ###the formula for the boosted classifier we wanted to implement.
+  C<-t(apply(C,2, sign))
+  dim(C)
+  
+  
+  predictvalues<-C[1,]
+  predictvalues[1:4]
+  print(length(predictvalues))
+  
+  return (predictvalues)
+
+}
+
+####Write a function which computes prediction error
+####Arguments: two vectors - dependent variable and vector of predictions
+###returns: a scalar value, the prediction error
+
+  perform<-function(y, yhat)
+  {
+  #paste(nrow(y), nrow(yhat))
+  data<-cbind(y, yhat)
+  class(data)
+  str(data)
+  class(data[2,])
+  data$error<-data[,1]-data[,2]
+  str(data$error)
+  data$error[data$error!=0]<-1
+  pred_error<-mean(data$error)
+  pred_error
+  
+  }
+
+
+```
+
+
+
+```{r}
+
+#####begin ADABOOST Algorithm
+
+
+
+
+#boosting<-function(T)
+
+T<-25
+
+####initialzing lists to store the training and test errors for each round of boosting
+trainError<-rep(0,T)
+testError<-rep(0,T)
+
+
+# ####outer loop: number of boosted rounds
+# for (t in 1:T)
+# {
+  ###create an empty matrix: each row will store the parameter vector for the tth     iteration
+  W<-matrix(, nrow=T, ncol=6)
+  
+  ###create an empty list: each entry will store the value of alpha from the tth iteration
+  ALPHA<-rep(0,T)
+  
+   ###create an empty list: each entry will store the value of error from the tth iteration
+  EPSILON<-rep(0,T)
+  
+  WEIGHT<-matrix(,nrow=nrow(Xtrain), ncol=T)
+  dim(WEIGHT)
+  
+  ###re-initializig weight to the starting uniform weight
+  weight<-weightStart
+  
+  ####begin inner loop. Once t is chosen, this inner loop executes adaboost for t rounds
+  
+  for (u in 1:T)
+  {
+  #paste("outer loop iteration#: ", t)
+  #paste("inner loop iteration#: ", u)
+  WEIGHT[,u]<-weight  
+  vec<-Xtrain_1$id
+  sample_vec<-sample(vec, size=n, replace=TRUE, prob=weight)
+  sample_vec<-as.numeric(sample_vec)
+  
+  length(unique(sample_vec))
+  ###646 unique observations
+
+
+  XtrainMat<-as.matrix(Xtrain)
+  ##creating a matrix
+  
+  ###Xbs - bootstrapped sample data
+  Xbs<-XtrainMat[sample_vec, ]
+  
+  #dim(X)
+  ####subsetting according to the weights - bootstrapped sample
+
+  
+  yid<-rownames(ytrain)
+  yid<-as.numeric(yid)
+  ytrainNew<-cbind(ytrain, yid)
+  str(ytrainNew)
+  ytrainNew<-ytrainNew[sample_vec, ]
+  length(unique(ytrainNew$yid))
+  ##ytrainNew$yid==X$id
+  #####should be TRUE
+  
+  ###remove the column with ids
+  ytrainNew<-ytrainNew$V1
+  
+  ##convert into matrix - ybs  - bootstrapped values of y
+  ybs<-as.matrix(ytrainNew)
+  #class(y)
+      
+  ###remove ytrainNew
+  rm(ytrainNew)
+  ###We conducted this test to see if we are sampling correctly. Don't need this anymore. we also need to subset the ytrain data accordingly - get the ys for the corresponding x vectors in X
+  #X<-Xtrain_1[sample_vec, ]
+  #length(unique(X$id))
+  
+  
+  ###learning the classifier- we learn the parameter w
+  w<-(solve(t(Xbs)%*%Xbs))%*%(t(Xbs)%*%ybs)
+  #dim(w)
+  #dim(W)
+W[u, ]<-t(w)  
+
+
+##temp<-as.data.frame(cbind(y, Xtrain_1$weight))
+##colnames(temp)<-c("y", "weight")
+
+###calculating the error
+
+
+result<-findError(w, weight)
+epsilon<-as.numeric(result[1])
+epsilon
+temp<-as.data.frame(result[2])
+
+
+####if epsilon>0.5, just change the sign of the vector w
+if (epsilon>0.5)
+{
+  w<- -(w)
+  W[u,]<-w
+  result<-findError(w, weight)
+  epsilon<-as.numeric(result[1])
+  temp<-as.data.frame(result[2])
+
+}
+
+#epsilon
+#temp
+
+####compute alpha
+alpha<-0.5*(log((1-epsilon)/epsilon))
+ALPHA[u]<-alpha
+#ALPHA
+EPSILON[u]<-epsilon
+
+###reassign the weights for next iteration
+
+####we will use the data frame temp which was returned in the find error function
+####we create a variable alpha in the data frame, it is a column with a constant value  
+temp<-temp%>%
+  mutate(alpha=alpha)%>%
+  mutate (weight_new=weight*exp(yhat*y*-(alpha)))
+
+###normalizing the new weights
+constant<-sum(temp$weight_new)
+temp$weight_new<-(temp$weight_new)/constant
+  
+###updating weights before next iteration
+weight<-temp$weight_new           
+
+rm(temp)  
+
+#paste("After round: ", u, "epsilon= ", EPSILON[u], "alpha= ", ALPHA[u])
+
+}
+
+
+#### This is the end of the boosting algorithm. We have now finished boosting for a given t=T. We have a matrix W with t rows and a list alpha with t components  
+  
+#####for eacg given value of t, we now want to compute the training and testing error. We call two functions to compute training and test error
+
+for (iter in 1:T)
+{
+  #ALPHAtemp<-data.frame(ALPHA)
+  #index<-as.numeric(rownames(ALPHAtemp))
+  ALPHAtemp<-ALPHA[1:iter]
+  ALPHAtemp<-as.numeric(ALPHAtemp)
+  ALPHAtemp
+  Wtemp<-as.matrix(W[1:iter, ])
+  Wtemp
+  
+  ######now we pass these temp objects to the function to find boosting error pertaining to t iterations of boosting
+  
+yhatTrain<-prediction(Xtrain, Wtemp, ALPHAtemp)
+#class(yhatTrain)  
+ 
+pred_error_train<-perform(ytrain, yhatTrain)
+
+
+###add this error value to a list. This is the error generated from t rounds of boosting
+trainError[iter]<-pred_error_train
+
+###repeat the same for test error
+yhatTest<-prediction(Xtest, Wtemp, ALPHAtemp)
+pred_error_test<-perform(ytest, yhatTest)
+testError[iter]<-pred_error_test
+
+ 
+}
+  
+
+compareError<-data.frame(trainError, testError)
+compareError$id<-as.numeric(rownames(compareError))
+str(compareError)
+colnames(compareError)<-c("trainError", "testError", "t")
+
+ggplot (compareError, aes(t))+
+  geom_line(aes(y=trainError, color="trainError"))+
+  geom_line(aes(y=testError, color="testError"))
+
+ggplot(compareError, aes(t, trainError))+
+  geom_line(y=trainError)
+
+plot(compareError$t, compareError$trainError, type="l")
+  
+
+
+
+
+
+```
+```{r}
+
+class(ALPHAtemp)
+ ALPHAtemp<-as.vector(ALPHAtemp)
+
+ XtrainMat<-as.matrix(XtrainMat)
+ Wtemp<-as.matrix(Wtemp)
+ class(Mat)
+ str(Mat)
+ str(W)
+
+
+ #####remember to take the sign again since this is a classification problem!
+ A<-sign(Mat%*%Wtr)
+ dim(A)
+ 
+ 
+  ###multiplying the ith row in transpose(A) by the ith component in alpha
+  B<-ALPHA*t(A)
+  
+  ###summing up each column in the matrix B
+  C<-t(apply(B,2, sum))
+  
+  ###taking the sign of all the elements in the row matrix C. This completes the 
+  ###the formula for the boosted classifier we wanted to implement.
+  C<-t(apply(C,2, sign))
+  
+  predictvalues<-C[1,]
+  
+  print(length(predictvalues))
+ 
+
+
+
+compareError<-data.frame(trainError, testError)
+compareError$id<-as.numeric(rownames(compareError))
+str(compareError)
+colnames(compareError)<-c("trainError", "testError", "t")
+
+ggplot (compareError, aes(t))+
+  geom_line(aes(y=trainError, color="trainError"))+
+  geom_line(aes(y=testError, color="testError"))
+
+ggplot(compareError, aes(t, trainError))+
+  geom_line(y=trainError)
+
+plot(compareError$t, compareError$trainError, type="l")
+
+```
+
+
+
+
+
+
+
+
+
+```
+
+<!-- # class(ALPHA) -->
+<!-- #  ALPHA<-as.vector(ALPHA) -->
+<!-- #  -->
+<!-- #  X<-as.matrix(Xtrain) -->
+<!-- #  class(X) -->
+<!-- #  dim(X) -->
+<!-- #  str(W) -->
+<!-- #  -->
+<!-- #  dim(Xtrain) -->
+<!-- #   -->
+<!-- #   -->
+<!-- #  dim(W) -->
+<!-- #  Wtr<-t(W) -->
+<!-- #  dim(Wtr) -->
+<!-- #  A<-X%*%Wtr -->
+<!-- #  dim(A) -->
+<!-- #  -->
+<!-- #   ###multiplying the ith row in A by the ith component in alpha -->
+<!-- #   B<-ALPHA*t(A) -->
+<!-- #   dim(B) -->
+<!-- #   ###summing up each column in the matrix B -->
+<!-- #   C<-t(apply(B,2, sum)) -->
+<!-- #   dim(C) -->
+<!-- #   ###taking the sign of all the elements in the row matrix C. This completes the  -->
+<!-- #   ###the formula for the boosted classifier we wanted to implement. -->
+<!-- #   C<-t(apply(C,2, sign)) -->
+<!-- #   dim(C) -->
+<!-- #    -->
+<!-- #   predictvalues<-C[1,] -->
+<!-- #    -->
+<!-- #   print(length(predictvalues)) -->
+<!-- #    -->
+
+
+  
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+```
+
+
