@@ -1,0 +1,340 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+```{r Read Data}
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 5/qs 1")
+getwd()
+
+rm(list=ls())
+library(tidyr)
+library(tidyverse)
+library(reshape2)
+
+data<-read.csv("CFB2016_scores.csv", head=FALSE)
+class(data)
+colnames(data)<-c("teamA_id", "teamA_points", "teamB_id", "teamB_points")
+nrow(data)
+###4197 games played
+
+teamNames<-readLines("TeamNames.txt")
+Teams<-data.frame(teamNames)
+colnames(Teams)<-"team"
+
+
+```
+```{r Construct the random walk matrix}
+### we initialize the matrix M with only 0s. This is a 760 by 760 matrix since we have 760 unique teams in our data set
+Mhat<-matrix(0, nrow=760, ncol=760)
+#dim(Mhat)
+#Mhat
+#ncol(M)
+
+###looks good
+
+##naming the dimensions
+colnames(Mhat) <- c(1:ncol(Mhat))
+rownames(Mhat)<-c(1:nrow(Mhat))
+##sum(M)
+
+
+checkTies<-data$teamA_points==data$teamB_points
+length(unique(checkTies))
+####There are no tied games in the data set
+
+###Construct the markove chain matrix using the rule provided in question
+num_games<-nrow(data)
+
+#game<-1
+
+for (game in 1:num_games)
+{
+   i<-data$teamA_id[game]
+   j<-data$teamB_id[game]
+   points_i<-data$teamA_points[game]
+   points_j<-data$teamB_points[game]
+   
+   AwinsFraction<-points_i/(points_i+points_j)
+   BwinsFraction<-points_j/(points_i+points_j)
+   
+   ### if team A wins
+  
+    if (points_i>points_j)
+   {
+     Mhat[i,i]<-Mhat[i,i] + 1 + AwinsFraction ###update the diagonal
+     
+     Mhat[j,i]<-Mhat[j,i] + 1 + AwinsFraction##update the off diagonal element - team B should transition to A
+     
+      Mhat[j,j]<-Mhat[j,j] + 0 + BwinsFraction 
+     
+     Mhat[i,j]<-Mhat[i,j] + 0 + BwinsFraction
+    
+     
+   }
+   
+   ##if team B wins
+   if (points_j > points_i)
+     
+   {
+      Mhat[j,j]<-Mhat[j,j] + 1 + BwinsFraction ###update the diagonal
+     
+     Mhat[i,j]<-Mhat[i,j] + 1 + BwinsFraction##update the off diagonal element - team A should transition to B
+     
+     Mhat[i,i]<-Mhat[i,i] + 0 + AwinsFraction ###update the diagonal
+     
+     Mhat[j,i]<-Mhat[j,i] + 0 + AwinsFraction##update the off diagonal element - team B should transition to A
+     
+   }
+  
+  
+}
+
+#####sum 16788
+
+####normalize the rows of the Mhat
+M<-Mhat
+
+for (j in 1:nrow(Mhat))
+{
+  total<-sum(Mhat[j,])
+  M[j,]<-M[j,]/total
+}
+
+###check
+# sum(Mhat[760,])
+# total
+# sum(M[760,])
+
+##works well!
+
+###Initializing the state  vector using the uniform distribution. This is the state distribution vector at time 0
+
+num_teams<-nrow(M)
+num_teams
+#w0<-runif(num_teams, 0, 1)
+#w0[1:7]
+
+#####w0 is the vector representing the state distribution at time 0. We assume that all teams are similar at the start so there is an equal probability of being in any state. Hence, this probability is uniform i.e. 1/760
+prob<-1/760
+prob
+
+
+w0<-rep(prob,num_teams)
+w0<-as.matrix(w0)
+
+
+######Alternate interpretation - where we randomly pick one starting state - this yields different results for small values of t
+# w0<-rep(0, num_teams)
+# 
+# startState<-round(runif(1,min=1, max=num_teams))
+# 
+# w0[startState]<-1
+# 
+# w0<-as.matrix(w0)
+
+```
+```{r - Questions}
+##a)
+
+# nam<-paste("w",t, sep="")
+# nam
+# assign(nam, 3)
+# nam
+# w10
+
+#####intialize a vector of 0s
+# w10<-as.matrix(rep(0,num_teams))
+# 
+# M10<-diag(760)
+# #dim(M10)
+# #M10[100,100]
+
+# for (steps in 1:t)
+# {
+#   M10<-M10%*%M
+# }
+# w10<-t(w0)%*%M10
+
+###function:
+##arguments: time - number of iterations, initVector - the initial vector with the state distributions, MarkovMatrix - a Markov chain matrix
+##returns - a vector which gives the state distribution at time indicted by the time variable
+# 
+# stateDistribution<-function(time,initVector,MarkovMatrix)
+# {
+#   Mat<-diag(nrow(MarkovMatrix))
+#   print(dim(Mat))
+# 
+#     for (step in 1:time)
+#   {
+#     Mat<-Mat%*%MarkovMatrix
+#   }
+#   
+#   stateVector<-t(initVector)%*%Mat
+#   ###nornmalize this vector, so that the components add up to 1
+#   total<-sum(stateVector)
+#   stateVector<-stateVector/total
+#   return(stateVector)
+# }
+
+###function:
+##arguments: time - number of iterations, initVector - the initial vector with the state distributions, MarkovMatrix - a Markov chain matrix
+##returns - a vector which gives the state distribution at time indicted by the time variable
+
+stateDistribution<-function(time,initVector,MarkovMatrix)
+{
+  # Mat<-diag(nrow(MarkovMatrix))
+  # print(dim(Mat))
+
+    for (step in 1:time)
+  {
+    initVector<-initVector%*%MarkovMatrix
+  }
+  
+  #stateVector<-t(initVector)%*%Mat
+  ###nornmalize this vector, so that the components add up to 1
+  total<-sum(initVector)
+  initVector<-initVector/total
+  return(initVector)
+}
+
+
+
+
+
+
+####Function ranking:
+##arguments - stateVector - a vector containing state distribution, time - number of iterations
+##returns - a data frame containing final results - the ranking of teams (top 25) along with their ids and the probabilities in the state vector. The function also outsheets a csv file with the results
+
+ranking<-function(stateVector, time)
+{
+
+  indices<-order(stateVector, decreasing = TRUE)
+  top25<-indices[1:25]
+  top25values<-stateVector[top25]
+  
+  top25teams<-data.frame(Teams[top25,])
+  result<-cbind(top25, top25teams, top25values)
+  colnames(result)<-c("team index", "team", "wt (values)")
+
+  nam<-paste("result-t=", time, ".csv", sep="")
+  print(nam)
+  write.csv(result,file=nam)
+  a<-assign(nam,result)
+  return(a)
+}
+
+
+w10<-stateDistribution(10,t(w0),M)
+result10<-ranking(w10,10)
+#write.csv(result10, file="result-t=10.csv")
+
+w100<-stateDistribution(100,t(w0),M)
+result100<-ranking(w100,100)
+
+
+w1000<-stateDistribution(1000,t(w0),M)
+result1000<-ranking(w1000,1000)
+
+w10000<-stateDistribution(10000,t(w0),M)
+result10000<-ranking(w10000,10000)
+
+
+
+# w10[1:7]
+# dim(w10)
+# which.max(w10)
+# 
+# dim(w10)
+# indices<-order(w10, decreasing = TRUE)
+# top25<-indices[1:25]
+# top25values<-w10[top25]
+# top25
+# top25teams<-data.frame(Teams[top25,])
+# result<-cbind(top25, top25teams, top25values)
+# colnames(result)<-c("team index", "team", "wt (values)")
+# 
+# nam<-paste("w",t, sep="")
+# a<-assign(nam, 3)
+# print(a)
+# a
+# 
+# nam<-paste("result-t=", t, ".csv", sep="")
+# write.csv(result,"nam")
+# a<-assign(nam,)
+
+
+```
+```{r Question 2 b)}
+####Finding the first eigenvector
+eigenStuff<-eigen(t(M))
+length(eigenStuff$values)
+####760 eigen values
+eigenStuff$values[1]
+##the first eigen value is 1
+
+firstEigenvector<-as.matrix(eigenStuff$vectors[,1])
+dim(firstEigenvector)
+
+mag<-t(firstEigenvector)%*%firstEigenvector
+###the length of the eigenvector is 1, as we expect it to be
+
+eigBasis<-eigenStuff$vectors
+
+number<-sum(firstEigenvector)
+winf<-t(firstEigenvector/number)
+dim(winf)
+#sum(firstEigenvector)
+#sum(winf)
+
+
+#######showing how the state distribution converges to the stationary distribution as t increases
+  time<-10000
+  stateVector<-t(w0)
+  Distance<-rep(NA,time)
+  
+    for (step in 1:time)
+  {
+    stateVector<-stateVector%*%M
+
+    manhattanDistance<-sum(abs(stateVector-winf))
+    Distance[step]<-manhattanDistance
+    
+  }
+  
+
+library(ggplot2)
+df<-data.frame(Distance)
+df$t<-rownames(df)
+names(df)
+
+plot(df$t, df$Distance, xlab = "t", ylab = "|wt-winf|", type = "line", main="Convergence to Stationary Distribution")
+
+#####ggplot is giving us problems for some reason
+# ggsave("p1.png")
+# 
+# ggplot(df, aes(date, unemploy)) + geom_line()
+# 
+# p1<-ggplot(df, aes(t, Distance))+
+#   geom_line()
+# p1
+# qplot(Distance, y=NULL, data=df)
+
+
+```
+dim(firstEigenvector)
+
+

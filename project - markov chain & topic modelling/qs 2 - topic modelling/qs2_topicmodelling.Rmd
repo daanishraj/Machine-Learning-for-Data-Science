@@ -1,0 +1,208 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+
+```{r Read the Data}
+setwd("/Users/DaanishRaj/Daanish_ALL/Aug 19 2014/Columbia 2014-16/Spring 2017/ML for Data Science/HW/HW 5/qs 2")
+getwd()
+
+rm(list=ls())
+
+```
+```{r Process the Data}
+### we want to input the NYT data into a matrix, say X . Xij, an element of the  the matrix represents the number of times the ith word appears in the jth document
+
+###Step1: Create a 3012*8447 matrix of 0s. This is the matrix we populate as we read each line of the nyt_data file
+X<-matrix(0,nrow=3012, ncol=8447)
+
+
+fileName <- "nyt_data.txt"
+conn <- file(fileName,open="r")
+linn <-readLines(conn)
+for (j in 1:length(linn)){
+   #print(linn[i])
+    line<-linn[j]### the ith line of the text document
+    firstSplit<-strsplit(line,",")[[1]] ###firstSplit contains different pairs of wordindex and count
+    for (i in 1:length(firstSplit))####we now loop over all the different pairs
+    {
+      secondSplit<-strsplit(firstSplit[i], ":")[[1]]##secondSplit contains the jth pair which has been split into the word index and the frequency
+      wordIndex<-as.numeric(secondSplit[1])
+      freq<-as.numeric(secondSplit[2])
+      X[wordIndex,j]<-freq### word index represents the row of our data matrix. The jth column is the document. We put the frequency in the corresponding cell
+   
+    }
+}
+close(conn)
+
+
+```
+
+```{r Solving the questions}
+## We want to find a rank k approximation to X i.e. X~WH
+##X is N*M, W is N*K and H is K*M
+
+
+###Start the algorithm
+
+#### Step 1: Initialize the values of W and H. These matrices should have non-negative values. We generate each cell in the matrices randomly from a Uniform(1,2) distribution
+
+###set rank
+K=25
+
+dim(X)
+##3012 rows, 8447 columns
+
+N<-nrow(X)
+M<-ncol(X)
+
+
+num_elements<-N*K
+
+W<-matrix(runif(num_elements,min=1, max=2), nrow=N, ncol=K)
+dim(W)
+### works well
+
+num_elements<-K*M
+
+H<-matrix(runif(num_elements, min=1, max=2), nrow=K, ncol=M)
+dim(H)
+
+##########Step 2: Update H and W - ####we use the vectorization methods provided on Pg 29 of Lecture 19. 
+
+runs<-100
+DivergenceValues<- rep(NA,runs)
+
+for (t in 1:runs)
+{
+  ###############a) Update H
+
+### Q=X./(W*H) i.e 'dot divide' X by W*H
+P<-W%*%H
+P[1:2,1:6]
+P<-P+10^(-16)
+R<-X/P ##dot division
+
+Wtr<-t(W)
+
+##normalize the rows of this matrix
+Wtr<-t(apply(Wtr, 1, function(x) x/sum(x)))
+##sum(Wtr)
+##works well
+
+###now update H
+H<-H*(Wtr%*%R)
+
+
+#################b) Now update W
+P<-W%*%H
+#P[1:2,1:6]
+P<-P+10^(-16)
+R<-X/P ##dot division
+
+
+Htr<-t(H)
+##normalize the columns of this matrix so they sum to 1
+Htr<-(apply(Htr, 2, function(x) x/sum(x)))
+##sum(Htr)
+##works well
+
+###now update W
+W<-W*(R%*%Htr)
+
+
+
+###########Step 3: Calculate the value of the objective function
+WH<-W%*%H
+
+WH<-WH + 10^(-16)
+WHmodified<-log(WH) 
+D1<-X*WHmodified 
+D2<-D1 - WH
+Divergence<- -(sum(D2))
+
+DivergenceValues[t]<-Divergence
+
+  
+}
+
+library(ggplot2)
+
+DivergenceValues
+
+######Answering Question 2a)
+plot(DivergenceValues)
+
+
+
+df<-data.frame(DivergenceValues)
+df$iterations<-rownames(df)
+# ggplot(df, aes(iterations, DivergenceValues))+
+#   geom_point()
+
+plot(df$iterations, df$DivergenceValues, xlab = "iterations", ylab = "values", type = "line", main="Objective Function vs # Iterations")
+
+
+
+```
+
+```{r Question 2b)}
+######normalizing the columns of W so they sum to 1
+W<-(apply(W, 2, function(x) x/sum(x)))
+dim(W)
+
+##read the list of unique words appearing in all the documents
+fileName <- "nyt_vocab.dat"
+conn <- file(fileName,open="r")
+wordsInDocs <-readLines(conn)
+close(conn)
+
+#rm(result)
+result<-data.frame(matrix(NA,nrow=10))
+
+
+####For each column of W (a topic), we find the 10 most frequently appearing in words along with the corresponding weight. We append these 
+#vectors to the empty data frame result, and then output this as a csv.
+#The csv contain 25 different topics and the words (Along with their weights), related to each topic
+
+
+
+for (topic in 1:ncol(W))
+{
+  vec<-W[,topic]
+  indices<-order(vec, decreasing = TRUE)
+  top10<-indices[1:10]
+  #result[,paste0("index",topic)]<-top10
+  # nam1<-paste("index", topic)
+  # assign(nam1,top10)
+
+  words<-wordsInDocs[top10]
+  result[,paste0("words",topic)]<-words
+  
+  wordWeights<-vec[top10]
+  result[,paste0("weights",topic)]<-wordWeights
+  
+}
+
+result<-result[,-1]
+
+write.csv(result, file="topics1.csv")#### contains word index as well
+write.csv(result, file="topics2.csv")###without word index
+
+
+
+```
+
